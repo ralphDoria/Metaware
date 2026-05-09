@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react'
 import './App.css'
 
+const API_URL = 'http://localhost:8000/process'
+
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -12,6 +14,8 @@ function App() {
   const [file, setFile] = useState(null)
   const [dragging, setDragging] = useState(false)
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState(null)
 
   const acceptFile = (f) => {
     if (!f) return
@@ -21,6 +25,7 @@ function App() {
       return
     }
     setError('')
+    setResult(null)
     setFile(f)
   }
 
@@ -42,7 +47,34 @@ function App() {
   const onClear = () => {
     setFile(null)
     setError('')
+    setResult(null)
     if (inputRef.current) inputRef.current.value = ''
+  }
+
+  const onAnalyze = async () => {
+    if (!file) return
+    setLoading(true)
+    setError('')
+    setResult(null)
+    try {
+      const formData = new FormData()
+      formData.append('video', file)
+      const res = await fetch(API_URL, { method: 'POST', body: formData })
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`)
+      const data = await res.json()
+      console.log('Voxels:', data.voxels)
+      console.log('Voxel shape:', [
+        data.voxels.length,
+        data.voxels[0]?.length,
+        data.voxels[0]?.[0]?.length,
+        data.voxels[0]?.[0]?.[0]?.length,
+      ])
+      setResult(data)
+    } catch (err) {
+      setError(err.message || 'Analysis failed.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -97,7 +129,28 @@ function App() {
         )}
       </section>
 
+      {file && (
+        <button
+          type="button"
+          className="analyze"
+          onClick={onAnalyze}
+          disabled={loading}
+        >
+          {loading ? 'Analyzing…' : 'Analyze'}
+        </button>
+      )}
+
       {error && <p className="error">{error}</p>}
+
+      {result && (
+        <section className="result">
+          <p className="result-feedback">{result.feedback}</p>
+          <p className="result-stats">
+            {result.high_activation_minutes} / {result.total_minutes} min in
+            high-stimulation state
+          </p>
+        </section>
+      )}
     </main>
   )
 }

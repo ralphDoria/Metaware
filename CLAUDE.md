@@ -36,38 +36,70 @@ Awareness tool for addictive social media. Predicts neural response to scrolled 
 
 ## Architecture
 
-Modular layout — prototype 2 swaps frontend, reuses pipeline + client lib unchanged.
+Split: heavy inference runs on Modal (cloud GPU). Parsing runs locally for fast iteration. Local FastAPI server bridges browser ↔ Modal and runs the parser.
 
 ```
 Metaware/
-  pipeline/         # Modal app: TribeV2 + parsing, deployed as Modal web endpoint
-    modal_app.py
-  packages/client/  # Shared JS lib: API calls, rolling-buffer sampler, types
-  my-app/           # Prototype 1 — Vite + React upload UI, imports client
-  extension/        # Prototype 2 — Chrome extension, imports same client
+  pipeline/
+    modal_app.py    # Modal app: TribeV2 inference (currently mock — returns fake voxels)
+  server/
+    main.py         # Local FastAPI: receives uploads, calls Modal, runs parser, returns JSON
+  src/              # React frontend (Vite root)
+  index.html
+  package.json
+```
+
+### Flow
+```
+React (browser, :5173)
+    │  POST /process  (multipart mp4)
+    ▼
+FastAPI (local, :8000)
+    │  tribe_infer.remote(video_bytes)
+    ▼
+Modal (cloud)  →  TribeV2 → voxels (mock for now)
+    │
+    ▼  voxels back
+FastAPI parses voxels locally  →  JSON response
+    ▼
+React renders feedback
 ```
 
 ### Rules
-- Pipeline (TribeV2 + parsing) runs on **Modal**. Heavy compute, cloud-only.
-- Modal exposes pipeline as web endpoint (`@modal.web_endpoint` or `@modal.asgi_app`). No separate server layer.
-- `packages/client` = pure JS, zero DOM/React deps. Both prototypes import it.
-- Rolling-buffer sampler lives in client lib (extension reuses for live feed).
-- Stable API contract: `POST /process { video } → { response }`.
-- Link client into apps via `"@metaware/client": "file:../packages/client"`.
-- Frontend hits Modal URL directly. Client lib holds endpoint URL.
+- TribeV2 inference runs on **Modal** (heavy, GPU). Parser runs on **local FastAPI** (cheap, fast iteration).
+- Stable API contract: `POST /process` (multipart `video`) → `{ feedback, high_activation_minutes, total_minutes }`.
+- React calls only the local FastAPI endpoint, never Modal directly.
+- FastAPI calls Modal via `modal.Function.from_name("metaware-tribe", "tribe_infer")` — uses local Modal token, no CORS needed at Modal layer.
+- Browser ↔ FastAPI requires CORS on FastAPI (already configured for `localhost:5173`).
+- Mock surfaces to swap later: `tribe_infer` body in `pipeline/modal_app.py`, `parse_voxels` in `server/main.py`.
 
-### Modal notes
-- Enable CORS on endpoint so browser (React app + extension) can call it:
-  ```python
-  from fastapi.middleware.cors import CORSMiddleware
-  app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-  ```
-- Set `keep_warm=1` for demo to avoid cold starts.
-- Auth: prototype = public endpoint. Production = token-gated.
+### Prototype 2 path
+- Reuse `pipeline/` and `server/` unchanged.
+- Build a Chrome extension that captures feed video via `chrome.tabCapture` or content script, posts the same `/process` payload to the local server (or hosted version of it).
 
 ## Run commands
 
-- React dev server (no cd): `npm run dev` — serves at `localhost:5173`
+Three processes for full local dev (run in three terminals):
+
+1. **Deploy Modal pipeline** (one-time per code change):
+   ```bash
+   source .venv/bin/activate
+   modal deploy pipeline/modal_app.py
+   ```
+   Smoke test: `modal run pipeline/modal_app.py`
+
+2. **Local FastAPI server**:
+   ```bash
+   source .venv/bin/activate
+   uvicorn server.main:app --reload
+   ```
+   Serves at `localhost:8000`. Verify: `curl localhost:8000/health`.
+
+3. **React dev server**:
+   ```bash
+   npm run dev
+   ```
+   Serves at `localhost:5173`.
 
 ## Python env
 
