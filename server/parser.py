@@ -253,6 +253,26 @@ def parse_preds(preds: np.ndarray) -> dict:
     score = raw_score / BASELINE_SCORE if BASELINE_SCORE else raw_score
     label = _label_for_score(score)
 
+    # Per-timestep recomputation so we can report "how many seconds of this
+    # session crossed the high-activation threshold". TribeV2 emits one
+    # prediction per second, so timesteps == seconds.
+    per_ts = {name: preds[:, mask].mean(axis=1) for name, mask in masks.items()}
+    per_ts_reward = (per_ts["reward"] + per_ts["salience"] + per_ts["pcc"] + per_ts["insula"]) / 4
+    per_ts_salience = (per_ts["face"] + per_ts["social"]) / 2
+    per_ts_control = per_ts["control"]
+    per_ts_score = (per_ts_reward + SALIENCE_WEIGHT * per_ts_salience) / (
+        per_ts_control + 1e-6
+    )
+    if BASELINE_SCORE:
+        per_ts_score = per_ts_score / BASELINE_SCORE
+
+    total_seconds = int(preds.shape[0])
+    high_activation_seconds = int((per_ts_score > 2.0).sum())
+    total_minutes = max(1, round(total_seconds / 60))
+    high_activation_minutes = min(
+        total_minutes, round(high_activation_seconds / 60)
+    )
+
     feedback = (
         f"Addictiveness score: {score:.2f} ({label}). "
         f"Reward composite: {reward_composite:.2f}, "
@@ -289,6 +309,10 @@ def parse_preds(preds: np.ndarray) -> dict:
         "feedback": feedback,
         "n_timesteps": int(preds.shape[0]),
         "n_vertices": int(preds.shape[1]),
+        "total_seconds": total_seconds,
+        "high_activation_seconds": high_activation_seconds,
+        "total_minutes": total_minutes,
+        "high_activation_minutes": high_activation_minutes,
         "rois": rois_f,
         "reward_composite": float(reward_composite),
         "salience_composite": float(salience_composite),

@@ -128,8 +128,8 @@ export default function Dashboard() {
               size={260}
               thickness={16}
               value={impact.reclaimed}
-              primary={`${result.total_minutes - result.high_activation_minutes}m`}
-              secondary={`of ${result.total_minutes}m sampled`}
+              primary={`${Math.max(0, (result.total_minutes ?? 0) - (result.high_activation_minutes ?? 0))}m`}
+              secondary={`of ${result.total_minutes ?? 0}m sampled`}
               label="Time reclaimed"
             />
             <div className="metis-panel__legend">
