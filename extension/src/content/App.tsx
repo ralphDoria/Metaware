@@ -18,10 +18,14 @@ import { BrainPanel } from './BrainPanel'
 import { CardList, MAX_CARDS, type Card } from './CardList'
 import { StatusBadge, type LoopStatus } from './StatusBadge'
 import { pickPattern } from './patterns'
+import { reelsAdapter } from './platforms/reels'
 
 // Range used for both the initial brain-reveal delay and the inter-card delay.
-const TICK_MIN_MS = 10_000
-const TICK_MAX_MS = 20_000
+const TICK_MIN_MS = 5_000
+const TICK_MAX_MS = 10_000
+
+// Probability that a generated card is "bad" — triggers a real reel skip.
+const BAD_CARD_PROB = 0.25
 
 function randMs(): number {
   return TICK_MIN_MS + Math.floor(Math.random() * (TICK_MAX_MS - TICK_MIN_MS))
@@ -43,18 +47,21 @@ function generateCard(): Card {
   const pattern = pickPattern()
   // Confidence skews high — the model "is sure" most of the time.
   const confidence = 0.55 + Math.random() * 0.4
-  // Addictiveness score: ~U(0.15, 0.95) so we hit every label tier eventually.
-  const score = 0.15 + Math.random() * 0.8
+  // 1-in-4 cards are "bad": forced into the high tier and flagged for skipping.
+  const isBad = Math.random() < BAD_CARD_PROB
+  const score = isBad ? 0.8 + Math.random() * 0.15 : 0.15 + Math.random() * 0.65
   const label = scoreToLabel(score)
-  // Cards with high score visually flag as "skipped" so the action chip varies
-  // — we're not actually skipping anything in demo mode.
-  const action: Card['action'] = label === 'high' ? 'skipped' : 'watched'
+  const action: Card['action'] = isBad ? 'skipped' : 'watched'
+  const confidencePct = (confidence * 100).toFixed(0)
+  const feedback = isBad
+    ? `Skipped reel — ${pattern.description} (confidence ${confidencePct}%)`
+    : `${pattern.description} (confidence ${confidencePct}%)`
   return {
     id: clipId(),
     label,
     score,
     primaryPattern: pattern.label,
-    feedback: `${pattern.description} (confidence ${(confidence * 100).toFixed(0)}%)`,
+    feedback,
     action,
     at: Date.now(),
   }
@@ -86,8 +93,12 @@ export function App() {
     function scheduleNextCard(): void {
       const ms = randMs()
       tickTimerRef.current = window.setTimeout(() => {
+        const card = generateCard()
         // Newest on top; cap at MAX_CARDS so the oldest (bottom) falls off.
-        setCards((prev) => [generateCard(), ...prev].slice(0, MAX_CARDS))
+        setCards((prev) => [card, ...prev].slice(0, MAX_CARDS))
+        if (card.action === 'skipped') {
+          void reelsAdapter.skip()
+        }
         scheduleNextCard()
       }, ms)
     }
