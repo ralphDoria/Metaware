@@ -7,6 +7,7 @@ const API_BASE = 'http://localhost:8000'
 const N_VERTS_PER_HEMI = 10242
 const HEMI_BYTES = N_VERTS_PER_HEMI * 3
 const FRAME_BYTES = HEMI_BYTES * 2
+const SCRUB_RATE_HZ = 10 // timesteps per second when auto-scrubbing
 
 /**
  * Find the first Mesh under a GLTF scene and return its geometry.
@@ -35,9 +36,9 @@ function applyLambert(mesh) {
 
 export default function BrainView({ brain }) {
   const containerRef = useRef(null)
-  const stateRef = useRef(null) // { renderer, scene, camera, controls, lh, rh, raf }
+  const stateRef = useRef(null) // { renderer, scene, camera, controls, lh, rh, colors, ... }
+  const scrubbingRef = useRef(false) // user actively dragging slider
   const [timestep, setTimestep] = useState(0)
-  const [colors, setColors] = useState(null) // Uint8Array of full buffer
   const [meshesReady, setMeshesReady] = useState(false)
   const [error, setError] = useState('')
 
@@ -70,11 +71,61 @@ export default function BrainView({ brain }) {
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
     controls.target.set(0, 0, 0)
+    controls.autoRotate = true
+    controls.autoRotateSpeed = 10 // ~100s per orbit; tune later
 
-    const state = { renderer, scene, camera, controls, lh: null, rh: null, raf: 0 }
+    const state = {
+      renderer,
+      scene,
+      camera,
+      controls,
+      group: null,
+      lh: null,
+      rh: null,
+      defaultPos: new THREE.Vector3(),
+      defaultTarget: new THREE.Vector3(),
+      tween: null, // { fromPos, fromTarget, t0, duration }
+      // Auto-scrub state. playT advances continuously; t0 = floor(playT) is
+      // shown on the slider, alpha = playT - t0 blends between adjacent
+      // timesteps for smooth interpolation.
+      colors: null,        // Uint8Array of full color buffer
+      nTimesteps: 0,
+      playT: 0,
+      scratchLh: null,     // Uint8Array(HEMI_BYTES) for lerped frame
+      scratchRh: null,
+      lastFrameMs: 0,
+      lastDisplayedT: -1,
+      raf: 0,
+    }
     stateRef.current = state
 
+    // Drag begins → freeze auto-rotate, kill any in-progress normalize tween.
+    controls.addEventListener('start', () => {
+      controls.autoRotate = false
+      state.tween = null
+    })
+    // Drag ends → tween camera to nearest point on the canonical orbit
+    // circle (radius R = |defaultPos|, equatorial Y=0), preserving the user's
+    // landing azimuth, then resume spin. Duration scales with angular sweep
+    // so small corrections snap fast and 180° flips don't drag.
+    controls.addEventListener('end', () => {
+      if (!state.defaultPos.lengthSq()) return // not yet initialized
+      const toPos = nearestOrbitTarget(camera.position, state.defaultPos)
+      const fromFlat = camera.position.clone().setY(0)
+      const angle = fromFlat.lengthSq() > 0 ? fromFlat.angleTo(toPos) : Math.PI
+      const duration = THREE.MathUtils.clamp(angle * 600, 400, 1400)
+      state.tween = {
+        fromPos: camera.position.clone(),
+        toPos,
+        fromTarget: controls.target.clone(),
+        t0: performance.now(),
+        duration,
+      }
+    })
+
     const tick = () => {
+      stepTween(state)
+      stepScrub(state, scrubbingRef.current, setTimestep)
       controls.update()
       renderer.render(scene, camera)
       state.raf = requestAnimationFrame(tick)
@@ -90,9 +141,17 @@ export default function BrainView({ brain }) {
     }
     window.addEventListener('resize', onResize)
 
+    // Slider pointerdown sets scrubbingRef true; release anywhere on window
+    // clears it (covers cursor leaving slider mid-drag).
+    const onWindowPointerUp = () => {
+      scrubbingRef.current = false
+    }
+    window.addEventListener('pointerup', onWindowPointerUp)
+
     return () => {
       cancelAnimationFrame(state.raf)
       window.removeEventListener('resize', onResize)
+      window.removeEventListener('pointerup', onWindowPointerUp)
       controls.dispose()
       renderer.dispose()
       if (renderer.domElement.parentElement === container) {
@@ -110,10 +169,13 @@ export default function BrainView({ brain }) {
     setMeshesReady(false)
     setError('')
 
-    // Drop previous meshes if we're reanalyzing.
+    // Drop previous group + meshes if we're reanalyzing.
+    if (state.group) {
+      state.scene.remove(state.group)
+      state.group = null
+    }
     for (const key of ['lh', 'rh']) {
       if (state[key]) {
-        state.scene.remove(state[key])
         state[key].geometry?.dispose?.()
         state[key].material?.dispose?.()
         state[key] = null
@@ -155,18 +217,52 @@ export default function BrainView({ brain }) {
         lh.position.sub(center)
         rh.position.sub(center)
 
-        state.scene.add(lh)
-        state.scene.add(rh)
+        // Wrap meshes in a group and rotate the group to map brain RAS frame
+        // (X = right, Y = anterior, Z = superior) onto the world frame that
+        // matches Three.js' default camera (at +Z looking -Z, up +Y):
+        //   brain +X (right)     → world +Z (faces camera; lateral right view)
+        //   brain +Y (anterior)  → world +X (anterior on viewer's right)
+        //   brain +Z (superior)  → world +Y (top of head up on screen)
+        // Vertex positions inside the geometry stay RAS — only the group's
+        // transform changes — so ROI math + future overlays remain in
+        // brain-native coords. Camera + OrbitControls stay default (no
+        // controls inversion).
+        const group = new THREE.Group()
+        group.add(lh)
+        group.add(rh)
+        const basis = new THREE.Matrix4().makeBasis(
+          new THREE.Vector3(0, 0, 1),
+          new THREE.Vector3(1, 0, 0),
+          new THREE.Vector3(0, 1, 0),
+        )
+        group.quaternion.setFromRotationMatrix(basis)
+
+        state.scene.add(group)
+        state.group = group
         state.lh = lh
         state.rh = rh
 
-        // Frame the brain in the camera.
+        // Frame the brain in the camera. Bbox diagonal length is rotation-
+        // invariant so this distance stays valid after the group rotation.
         const size = bbox.getSize(new THREE.Vector3()).length()
         state.camera.position.set(0, 0, size * 1.6)
         state.controls.target.set(0, 0, 0)
         state.camera.lookAt(0, 0, 0)
+        state.defaultPos.copy(state.camera.position)
+        state.defaultTarget.copy(state.controls.target)
+        // Re-enable auto-rotate after a load (covers re-analyze case where a
+        // previous tween may have left it off).
+        state.controls.autoRotate = true
 
-        setColors(new Uint8Array(colorBuf))
+        // Hand the color buffer + scratch buffers to the raf loop, which
+        // drives both the auto-scrub and the smooth per-frame color lerp.
+        state.colors = new Uint8Array(colorBuf)
+        state.nTimesteps = brain.n_timesteps
+        state.playT = 0
+        state.scratchLh = new Uint8Array(HEMI_BYTES)
+        state.scratchRh = new Uint8Array(HEMI_BYTES)
+        state.lastDisplayedT = -1
+        state.lastFrameMs = 0
         setTimestep(0)
         setMeshesReady(true)
       })
@@ -180,21 +276,6 @@ export default function BrainView({ brain }) {
     }
   }, [brain])
 
-  // ---- Apply per-timestep colors to vertex color attribute. ----
-  useEffect(() => {
-    if (!meshesReady || !colors || !stateRef.current) return
-    const { lh, rh } = stateRef.current
-    if (!lh || !rh) return
-
-    const t = Math.min(timestep, brain.n_timesteps - 1)
-    const frameOffset = t * FRAME_BYTES
-    const lhSlice = colors.subarray(frameOffset, frameOffset + HEMI_BYTES)
-    const rhSlice = colors.subarray(frameOffset + HEMI_BYTES, frameOffset + FRAME_BYTES)
-
-    writeVertexColors(lh.geometry, lhSlice)
-    writeVertexColors(rh.geometry, rhSlice)
-  }, [meshesReady, colors, timestep, brain])
-
   return (
     <section className="brain-section">
       <h2 className="brain-heading">Brain activity</h2>
@@ -206,7 +287,17 @@ export default function BrainView({ brain }) {
           min={0}
           max={Math.max(0, (brain?.n_timesteps ?? 1) - 1)}
           value={timestep}
-          onChange={(e) => setTimestep(Number(e.target.value))}
+          onPointerDown={() => {
+            scrubbingRef.current = true
+          }}
+          onChange={(e) => {
+            const v = Number(e.target.value)
+            setTimestep(v)
+            if (stateRef.current) {
+              stateRef.current.playT = v
+              stateRef.current.lastDisplayedT = v
+            }
+          }}
           className="brain-slider"
           disabled={!meshesReady}
         />
@@ -220,6 +311,99 @@ export default function BrainView({ brain }) {
       </div>
     </section>
   )
+}
+
+/**
+ * Cubic ease-in-out: smooth start, smooth land, no overshoot.
+ */
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+}
+
+/**
+ * Find the nearest point on the canonical auto-rotate orbit to the camera's
+ * current position. Orbit = circle in the Y=0 plane, radius R = |defaultPos|,
+ * centered on `controls.target` (assumed origin here). Preserves the user's
+ * azimuth (where they landed); restores radius + elevation to canonical so
+ * auto-rotate resumes seamlessly. Singular case (camera over the pole) falls
+ * back to defaultPos.
+ */
+function nearestOrbitTarget(currentPos, defaultPos) {
+  const R = defaultPos.length()
+  const d = Math.hypot(currentPos.x, currentPos.z)
+  if (d < 1e-3) return defaultPos.clone()
+  return new THREE.Vector3((currentPos.x * R) / d, 0, (currentPos.z * R) / d)
+}
+
+/**
+ * Step the camera-return tween one frame. When the user releases the mouse
+ * after a manual rotation, we tween the camera to the nearest point on the
+ * auto-rotate orbit (cached at tween creation as `tw.toPos`), then resume
+ * OrbitControls' built-in auto-rotate.
+ */
+function stepTween(state) {
+  const tw = state.tween
+  if (!tw) return
+  const k = (performance.now() - tw.t0) / tw.duration
+  if (k >= 1) {
+    state.camera.position.copy(tw.toPos)
+    state.controls.target.copy(state.defaultTarget)
+    state.tween = null
+    state.controls.autoRotate = true
+    return
+  }
+  const e = easeInOutCubic(k)
+  state.camera.position.lerpVectors(tw.fromPos, tw.toPos, e)
+  state.controls.target.lerpVectors(tw.fromTarget, state.defaultTarget, e)
+}
+
+/**
+ * Advance the auto-scrub one frame and write smoothly-interpolated vertex
+ * colors. `playT` is a fractional timestep that walks at SCRUB_RATE_HZ when
+ * the user isn't dragging the slider; per-frame we floor it to t0, take t1
+ * as the next timestep (wrapping to 0 at the end), and lerp the two color
+ * frames by alpha = playT - t0. The integer t0 is pushed to React state
+ * only on change so we don't re-render every frame.
+ */
+function stepScrub(state, isScrubbing, setTimestep) {
+  if (!state.colors || !state.lh || !state.rh || state.nTimesteps === 0) return
+  const now = performance.now()
+  const dt = state.lastFrameMs ? (now - state.lastFrameMs) / 1000 : 0
+  state.lastFrameMs = now
+
+  if (!isScrubbing) {
+    state.playT = (state.playT + SCRUB_RATE_HZ * dt) % state.nTimesteps
+  }
+
+  const t0 = Math.floor(state.playT)
+  const t1 = (t0 + 1) % state.nTimesteps
+  const alpha = state.playT - t0
+  const off0 = t0 * FRAME_BYTES
+  const off1 = t1 * FRAME_BYTES
+  const colors = state.colors
+  const sLh = state.scratchLh
+  const sRh = state.scratchRh
+
+  // Lerp left hemi.
+  for (let i = 0; i < HEMI_BYTES; i++) {
+    const a = colors[off0 + i]
+    const b = colors[off1 + i]
+    sLh[i] = (a + (b - a) * alpha) | 0
+  }
+  // Lerp right hemi (offset HEMI_BYTES into each frame).
+  for (let i = 0; i < HEMI_BYTES; i++) {
+    const a = colors[off0 + HEMI_BYTES + i]
+    const b = colors[off1 + HEMI_BYTES + i]
+    sRh[i] = (a + (b - a) * alpha) | 0
+  }
+
+  writeVertexColors(state.lh.geometry, sLh)
+  writeVertexColors(state.rh.geometry, sRh)
+
+  if (t0 !== state.lastDisplayedT) {
+    state.lastDisplayedT = t0
+    setTimestep(t0)
+  }
 }
 
 /**
