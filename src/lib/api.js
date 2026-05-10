@@ -1,4 +1,4 @@
-export const API_BASE = 'http://localhost:8000'
+export const API_BASE = 'https://metis.mnkjoshi.ca'
 
 export async function fetchSessions(limit = 20) {
   const res = await fetch(`${API_BASE}/sessions?limit=${limit}`)

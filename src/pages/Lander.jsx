@@ -9,7 +9,7 @@ import '../components/metis-core/Orb3D.css'
 
 const Orb3D = lazy(() => import('../components/metis-core/Orb3D.jsx'))
 
-const API_URL = 'http://localhost:8000/process'
+const API_URL = 'https://metis.mnkjoshi.ca/process'
 
 const NOISE_ITEMS = [
   { id: 0,  x: 8,  y: 12, s: 0.9, d: 0.0, sym: '♥' },

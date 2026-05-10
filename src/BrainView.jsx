@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
-const API_BASE = 'http://localhost:8000'
+const API_BASE = 'https://metis.mnkjoshi.ca'
 const N_VERTS_PER_HEMI = 10242
 const HEMI_BYTES = N_VERTS_PER_HEMI * 3
 const FRAME_BYTES = HEMI_BYTES * 2
