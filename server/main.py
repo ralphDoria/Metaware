@@ -37,7 +37,17 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https?://(.+\.)?mnkjoshi\.ca",
+    # Allow: localhost dev, the API host itself, the production frontend
+    # (trymetis.web.app), and Firebase Hosting preview channels
+    # (trymetis--<channel>-<hash>.web.app).
+    allow_origin_regex=(
+        r"https?://("
+        r"localhost(:\d+)?"
+        r"|(.+\.)?mnkjoshi\.ca"
+        r"|trymetis\.web\.app"
+        r"|trymetis--[a-z0-9-]+\.web\.app"
+        r")"
+    ),
     allow_methods=["*"],
     allow_headers=["*"],
 )
