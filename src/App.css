@@ -694,3 +694,361 @@
   border-color: rgba(255, 140, 0, 0.35);
   color: #ffd9a8;
 }
+
+/* =================================================================
+   Pipeline result blocks (variables, score breakdown, patterns,
+   3D brain view). Restyled with the Metis nebula tokens so the
+   three-brain-viewer feature surfaces blend with the dashboard.
+   ================================================================= */
+
+.metis-block {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.metis-block + .metis-block {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--metis-border);
+}
+
+.metis-block__heading {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--metis-text);
+  margin: 0;
+}
+
+.metis-block__caveat {
+  font-size: 12px;
+  color: var(--metis-text-faint);
+  margin: 0;
+  line-height: 1.55;
+  font-style: italic;
+}
+
+.metis-block__empty {
+  font-size: 13px;
+  color: var(--metis-text-faint);
+  margin: 0;
+  line-height: 1.55;
+}
+
+/* ---- Result summary (score + label + feedback) -------------------------- */
+
+.metis-result-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.metis-result-summary__score {
+  font-size: 15px;
+  color: var(--metis-text-soft);
+  margin: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.metis-result-summary__score strong {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--metis-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.metis-result-label {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--metis-glass);
+  border: 1px solid var(--metis-border);
+  color: var(--metis-text-soft);
+}
+
+.metis-result-label--elevated {
+  background: rgba(251, 191, 36, 0.10);
+  border-color: rgba(251, 191, 36, 0.35);
+  color: var(--metis-warn);
+}
+
+.metis-result-label--high {
+  background: rgba(248, 113, 113, 0.10);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: var(--metis-danger);
+}
+
+.metis-result-summary__feedback {
+  font-size: 14px;
+  color: var(--metis-text-soft);
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* ---- Variables grid ----------------------------------------------------- */
+
+.metis-vars {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.metis-var {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--metis-border);
+  font-size: 13px;
+}
+
+.metis-var:last-child {
+  border-bottom: none;
+}
+
+.metis-var__name {
+  color: var(--metis-text);
+}
+
+.metis-var__value {
+  color: var(--metis-text-faint);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.metis-qualifier {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--metis-glass);
+  border: 1px solid var(--metis-border);
+  color: var(--metis-text-soft);
+  min-width: 64px;
+  text-align: center;
+}
+
+.metis-qualifier--low {
+  background: rgba(110, 231, 183, 0.10);
+  border-color: rgba(110, 231, 183, 0.30);
+  color: var(--metis-good);
+}
+
+.metis-qualifier--medium {
+  background: var(--metis-glass);
+  border-color: var(--metis-border-strong);
+  color: var(--metis-text-soft);
+}
+
+.metis-qualifier--high {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: var(--metis-danger);
+}
+
+/* ---- Score breakdown ---------------------------------------------------- */
+
+.metis-breakdown__formula {
+  font-size: 12px;
+  color: var(--metis-text-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--metis-haze);
+  border: 1px solid var(--metis-border);
+  padding: 10px 14px;
+  border-radius: var(--metis-radius-sm);
+}
+
+.metis-breakdown__grid {
+  display: flex;
+  flex-direction: column;
+}
+
+.metis-breakdown__row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--metis-text-soft);
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--metis-border);
+  font-variant-numeric: tabular-nums;
+}
+
+.metis-breakdown__row:last-child {
+  border-bottom: none;
+}
+
+.metis-breakdown__row--total {
+  border-top: 1px solid var(--metis-border-strong);
+  padding-top: 12px;
+  margin-top: 4px;
+  font-weight: 600;
+  color: var(--metis-text);
+}
+
+/* ---- Detected patterns -------------------------------------------------- */
+
+.metis-patterns {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.metis-pattern {
+  border: 1px solid var(--metis-border);
+  border-radius: var(--metis-radius-sm);
+  padding: 14px 16px;
+  background: var(--metis-haze);
+}
+
+.metis-pattern__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.metis-pattern__label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--metis-text);
+}
+
+.metis-confidence {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--metis-glass);
+  border: 1px solid var(--metis-border);
+  color: var(--metis-text-faint);
+  white-space: nowrap;
+}
+
+.metis-confidence--low {
+  color: var(--metis-text-faint);
+}
+
+.metis-confidence--medium {
+  background: rgba(251, 191, 36, 0.10);
+  border-color: rgba(251, 191, 36, 0.35);
+  color: var(--metis-warn);
+}
+
+.metis-confidence--high {
+  background: rgba(110, 231, 183, 0.12);
+  border-color: rgba(110, 231, 183, 0.30);
+  color: var(--metis-good);
+}
+
+.metis-pattern__description {
+  font-size: 13px;
+  color: var(--metis-text-soft);
+  margin: 0;
+  line-height: 1.55;
+}
+
+/* ---- Brain view (Three.js GLB) ------------------------------------------ */
+
+.metis-brainview {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.metis-brainview__canvas-wrap {
+  width: 100%;
+  height: 420px;
+  border: 1px solid var(--metis-border);
+  border-radius: var(--metis-radius-md);
+  overflow: hidden;
+  background:
+    radial-gradient(120% 80% at 50% 0%,
+      rgba(138, 43, 226, 0.10) 0%,
+      transparent 55%),
+    var(--metis-void-deep);
+  position: relative;
+}
+
+.metis-brainview__canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.metis-brainview__controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.metis-brainview__slider {
+  flex: 1;
+  accent-color: var(--metis-amethyst-soft);
+}
+
+.metis-brainview__time {
+  font-size: 12px;
+  color: var(--metis-text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  letter-spacing: 0.06em;
+}
+
+.metis-brainview__legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--metis-text-faint);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.metis-brainview__legend-bar {
+  display: inline-block;
+  width: 140px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(
+    to right,
+    #000000,
+    #4a0a0a,
+    #aa2200,
+    #ff7700,
+    #ffee44,
+    #ffffff
+  );
+  border: 1px solid var(--metis-border);
+}
+
+.metis-brainview__empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--metis-text-faint);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  pointer-events: none;
+  text-align: center;
+  padding: 0 24px;
+}
