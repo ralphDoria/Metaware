@@ -1,279 +1,101 @@
-import { useEffect, useRef, useState } from 'react'
-import BrainView from './BrainView.jsx'
+import { useState } from 'react'
+import { NavLink, Outlet, Route, Routes, useLocation } from 'react-router-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import './App.css'
+import NebulaBackdrop from './components/metis-core/NebulaBackdrop.jsx'
+import ParentalToggle from './components/metis-core/ParentalToggle.jsx'
+import Lander from './pages/Lander.jsx'
+import Dashboard from './pages/Dashboard.jsx'
+import Shield from './pages/Shield.jsx'
+import Agora from './pages/Agora.jsx'
+import { pageVariants } from './lib/motion.js'
 
-const API_BASE = 'http://localhost:8000'
-
-function App() {
-  const inputRef = useRef(null)
-  const [file, setFile] = useState(null)
-  const [dragging, setDragging] = useState(false)
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [demoLoading, setDemoLoading] = useState(false)
-  const [result, setResult] = useState(null)
-  const [videoUrl, setVideoUrl] = useState(null)
-
-  useEffect(() => {
-    if (!file) {
-      setVideoUrl(null)
-      return
-    }
-    const url = URL.createObjectURL(file)
-    setVideoUrl(url)
-    return () => URL.revokeObjectURL(url)
-  }, [file])
-
-  const acceptFile = (f) => {
-    if (!f) return
-    if (f.type !== 'video/mp4') {
-      setError('Only MP4 files are supported.')
-      setFile(null)
-      return
-    }
-    setError('')
-    setResult(null)
-    setFile(f)
-  }
-
-  const onDragOver = (e) => {
-    e.preventDefault()
-    setDragging(true)
-  }
-
-  const onDragLeave = () => setDragging(false)
-
-  const onDrop = (e) => {
-    e.preventDefault()
-    setDragging(false)
-    acceptFile(e.dataTransfer.files?.[0])
-  }
-
-  const onChange = (e) => acceptFile(e.target.files?.[0])
-
-  const onClear = () => {
-    setFile(null)
-    setError('')
-    setResult(null)
-    if (inputRef.current) inputRef.current.value = ''
-  }
-
-  const onAnalyze = async () => {
-    if (!file) return
-    setLoading(true)
-    setError('')
-    setResult(null)
-    try {
-      const formData = new FormData()
-      formData.append('video', file)
-      const res = await fetch(`${API_BASE}/process`, {
-        method: 'POST',
-        body: formData,
-      })
-      if (!res.ok) throw new Error(`Request failed: ${res.status}`)
-      const data = await res.json()
-      console.log('Result:', data)
-      setResult(data)
-    } catch (err) {
-      setError(err.message || 'Analysis failed.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const onDemo = async () => {
-    setDemoLoading(true)
-    setError('')
-    setResult(null)
-    try {
-      const res = await fetch(`${API_BASE}/demo`)
-      if (!res.ok) throw new Error(`Demo failed: ${res.status}`)
-      const data = await res.json()
-      console.log('Demo result:', data)
-      setResult(data)
-    } catch (err) {
-      setError(err.message || 'Demo failed.')
-    } finally {
-      setDemoLoading(false)
-    }
-  }
-
+function Nav({ parental, setParental }) {
   return (
-    <main className="page">
-      <header className="header">
-        <h1 className="brand">Metaware</h1>
-        <p className="manifesto">
-          Metaware surfaces the neural impact of your social media feed. Upload a clip
-          to see what your brain is doing while you scroll.
-        </p>
-      </header>
+    <nav className="metis-nav">
+      <NavLink to="/" className="metis-logo" end>
+        <span className="metis-logo__mark" aria-hidden>
+          <svg viewBox="0 0 32 32" width="22" height="22">
+            <defs>
+              <linearGradient id="metis-logo-grad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#a06bf0" />
+                <stop offset="100%" stopColor="#f472b6" />
+              </linearGradient>
+            </defs>
+            <circle cx="16" cy="16" r="6" fill="url(#metis-logo-grad)" />
+            <circle cx="16" cy="16" r="11" fill="none" stroke="url(#metis-logo-grad)" strokeWidth="1.2" opacity="0.6" />
+            <circle cx="16" cy="16" r="15" fill="none" stroke="url(#metis-logo-grad)" strokeWidth="0.7" opacity="0.3" />
+          </svg>
+        </span>
+        <span className="metis-logo__word">Metis</span>
+      </NavLink>
 
-      {!file && (
-        <section
-          className={`dropzone ${dragging ? 'is-dragging' : ''}`}
-          onDragOver={onDragOver}
-          onDragLeave={onDragLeave}
-          onDrop={onDrop}
-          onClick={() => inputRef.current?.click()}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click()
-          }}
-        >
-          <input
-            ref={inputRef}
-            type="file"
-            accept="video/mp4"
-            onChange={onChange}
-            hidden
-          />
-          <div className="prompt">
-            <p className="prompt-primary">Drop an MP4 here</p>
-            <p className="prompt-secondary">or click to upload</p>
-          </div>
-        </section>
-      )}
+      <div className="metis-nav__links">
+        <NavLink to="/dashboard" className={({ isActive }) => `metis-nav__link ${isActive ? 'is-active' : ''}`}>
+          Dashboard
+        </NavLink>
+        <NavLink to="/agora" className={({ isActive }) => `metis-nav__link ${isActive ? 'is-active' : ''}`}>
+          Agora
+        </NavLink>
+        <NavLink to="/shield" className={({ isActive }) => `metis-nav__link ${isActive ? 'is-active' : ''}`}>
+          Active Shield
+        </NavLink>
+      </div>
 
-      {videoUrl && (
-        <section className="preview">
-          <video src={videoUrl} controls className="video" />
-          <button
-            type="button"
-            className="close"
-            onClick={onClear}
-            aria-label="Remove video"
-          >
-            ×
-          </button>
-        </section>
-      )}
-
-      {file && (
-        <button
-          type="button"
-          className="analyze"
-          onClick={onAnalyze}
-          disabled={loading}
-        >
-          {loading ? 'Analyzing…' : 'Analyze'}
-        </button>
-      )}
-
-      {error && <p className="error">{error}</p>}
-
-      <section className="demo-section">
-        <p className="demo-hint">No video? Try the parser on a sample TribeV2 output.</p>
-        <button
-          type="button"
-          className="demo-button"
-          onClick={onDemo}
-          disabled={demoLoading}
-        >
-          {demoLoading ? 'Running demo…' : 'Demo with sample data'}
-        </button>
-      </section>
-
-      {result && (
-        <section className="result">
-          <p className="result-score">
-            Score: <strong>{result.score?.toFixed(2)}</strong>{' '}
-            <span className={`result-label result-label-${result.label}`}>
-              {result.label}
-            </span>
-          </p>
-          <p className="result-feedback">{result.feedback}</p>
-
-          {result.variables && (
-            <div className="variables-block">
-              <h3 className="block-heading">Brain regions</h3>
-              <div className="variables-grid">
-                {result.variables.map((v) => (
-                  <div key={v.key} className="variable-row">
-                    <span className="variable-name">{v.name}</span>
-                    <span className="variable-value">{v.value.toFixed(3)}</span>
-                    <span className={`qualifier-badge qualifier-${v.qualifier}`}>
-                      {v.qualifier}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <p className="block-caveat">
-                Qualifiers are per-session percentile (top third = high, bottom third = low) —
-                relative within this clip until a neutral-footage baseline is computed.
-              </p>
-            </div>
-          )}
-
-          {result.score_breakdown && (
-            <div className="breakdown-block">
-              <h3 className="block-heading">Addictiveness score</h3>
-              <div className="breakdown-formula">
-                {result.score_breakdown.formula}
-              </div>
-              <div className="breakdown-grid">
-                <div className="breakdown-row">
-                  <span>Reward composite</span>
-                  <span>{result.score_breakdown.reward_composite.toFixed(3)}</span>
-                </div>
-                <div className="breakdown-row">
-                  <span>Salience composite</span>
-                  <span>{result.score_breakdown.salience_composite.toFixed(3)}</span>
-                </div>
-                <div className="breakdown-row">
-                  <span>Control composite</span>
-                  <span>{result.score_breakdown.control_composite.toFixed(3)}</span>
-                </div>
-                <div className="breakdown-row breakdown-row-total">
-                  <span>Raw score</span>
-                  <span>{result.score_breakdown.raw_score.toFixed(2)}</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {result.patterns && (
-            <div className="patterns-block">
-              <h3 className="block-heading">Detected patterns</h3>
-              {result.patterns.length === 0 ? (
-                <p className="block-empty">
-                  No clear pattern emerged — variables are mixed without a strong signature.
-                </p>
-              ) : (
-                <ul className="patterns-list">
-                  {result.patterns.map((p) => (
-                    <li key={p.key} className="pattern-card">
-                      <div className="pattern-card-header">
-                        <span className="pattern-label">{p.label}</span>
-                        <span className={`confidence-badge confidence-${p.confidence_label}`}>
-                          {p.confidence_label} confidence
-                        </span>
-                      </div>
-                      <p className="pattern-description">{p.description}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <p className="block-caveat">
-                Reverse inference is approximate — brain regions serve multiple functions.
-                Confidence reflects pattern plausibility, not data certainty.
-              </p>
-            </div>
-          )}
-
-          <button
-            type="button"
-            className="reset-button"
-            onClick={() => setResult(null)}
-          >
-            Reset
-          </button>
-        </section>
-      )}
-
-      <BrainView brain={result?.brain ?? null} />
-    </main>
+      <div className="metis-nav__cta">
+        <ParentalToggle enabled={parental} onChange={setParental} />
+      </div>
+    </nav>
   )
 }
 
-export default App
+function Layout({ ctx }) {
+  const location = useLocation()
+  return (
+    <div className={`metis-app ${ctx.parental ? 'is-parental' : ''}`}>
+      <NebulaBackdrop />
+
+      <Nav parental={ctx.parental} setParental={ctx.setParental} />
+
+      <main className="metis-main">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={location.pathname}
+            variants={pageVariants}
+            initial="initial"
+            animate="enter"
+            exit="exit"
+          >
+            <Outlet context={ctx} />
+          </motion.div>
+        </AnimatePresence>
+      </main>
+
+      <footer className="metis-foot">
+        <p>
+          Metis · A cognitive sanctuary. Pipeline runs locally; inference on Modal. No feed data
+          leaves your machine.
+        </p>
+      </footer>
+    </div>
+  )
+}
+
+export default function App() {
+  const [result, setResult] = useState(null)
+  const [parental, setParental] = useState(false)
+
+  const ctx = { result, setResult, parental, setParental }
+
+  return (
+    <Routes>
+      <Route element={<Layout ctx={ctx} />}>
+        <Route index element={<Lander />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/shield" element={<Shield />} />
+        <Route path="/agora" element={<Agora />} />
+        <Route path="*" element={<Lander />} />
+      </Route>
+    </Routes>
+  )
+}

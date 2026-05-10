@@ -58,15 +58,16 @@ export default function BrainView({ brain }) {
     if (!container) return
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0xffffff)
+    scene.background = null
 
     const w = container.clientWidth
     const h = container.clientHeight
     const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 2000)
     camera.position.set(0, 0, 350)
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true })
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setPixelRatio(window.devicePixelRatio)
+    renderer.setClearColor(0x000000, 0)
     renderer.setSize(w, h)
     container.appendChild(renderer.domElement)
 
@@ -312,12 +313,17 @@ export default function BrainView({ brain }) {
   }, [brain])
 
   return (
-    <section className="brain-section">
-      <h2 className="brain-heading">Brain activity</h2>
-      <div ref={containerRef} className="brain-canvas-wrap" />
-      {error && <p className="error">{error}</p>}
+    <div className="metis-brainview">
+      <div ref={containerRef} className="metis-brainview__canvas-wrap">
+        {!hasData && !error && (
+          <span className="metis-brainview__empty">
+            Awaiting neural data
+          </span>
+        )}
+      </div>
+      {error && <p className="metis-error">{error}</p>}
       {hasData && (
-        <div className="brain-controls">
+        <div className="metis-brainview__controls">
           <input
             type="range"
             min={0}
@@ -334,21 +340,21 @@ export default function BrainView({ brain }) {
                 stateRef.current.lastDisplayedT = v
               }
             }}
-            className="brain-slider"
+            className="metis-brainview__slider"
             disabled={!meshesReady}
           />
-          <span className="brain-time">
+          <span className="metis-brainview__time">
             t = {timestep} / {Math.max(0, (brain?.n_timesteps ?? 1) - 1)}
           </span>
         </div>
       )}
       {hasData && (
-        <div className="brain-legend">
-          <span className="brain-legend-bar" />
-          <span className="brain-legend-text">low → high</span>
+        <div className="metis-brainview__legend">
+          <span className="metis-brainview__legend-bar" />
+          <span>low → high</span>
         </div>
       )}
-    </section>
+    </div>
   )
 }
 
