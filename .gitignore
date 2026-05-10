@@ -9,14 +9,11 @@ lerna-debug.log*
 
 node_modules
 dist
-dist-ssr
-*.local
-
 # Python
 __pycache__/
 *.pyc
 .venv/
-
+.secrets
 # Test assets (large binaries, not source)
 Assets/
 
